@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciamento de Irrigação</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">Gerenciamento de Irrigação</h1>
+        <div class="form-group">
+            <label for="calendar">Selecione a data:</label>
+            <div id="calendar"></div>
+        </div>
+        <div class="form-group">
+            <label>Horário de Irrigação:</label>
+            <div class="form-inline">
+                <label for="hour" class="mr-2">Hora:</label>
+                <input type="number" id="hour" class="form-control mr-2" min="0" max="23" value="00">
+                <label for="minute" class="mr-2">Minutos:</label>
+                <input type="number" id="minute" class="form-control" min="0" max="59" value="00">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="quantity">Quantidade de Irrigação (mm):</label>
+            <input type="number" id="quantity" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="rain">Choveu no dia?</label>
+            <select id="rain" class="form-control">
+                <option value="Não">Não</option>
+                <option value="Sim">Sim</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="precipitation">Precipitação prevista no dia (mm):</label>
+            <div class="form-inline">
+                <input type="number" id="precipitation" class="form-control mr-2">
+                <button class="btn btn-primary mr-2" onclick="openWeatherSite()">Ver Previsão</button>
+                <button class="btn btn-primary" onclick="openSatelliteSite()">Previsão Por Satélite</button>
+            </div>
+        </div>
+        <button class="btn btn-success btn-block" onclick="registerIrrigation()">Registrar</button>
+        <button class="btn btn-info btn-block" onclick="viewRecords()">Visualizar Registros</button>
+        <button class="btn btn-warning btn-block" onclick="showGraph()">Representação Gráfica</button>
+        <button class="btn btn-secondary btn-block" onclick="downloadRecordsAsXML()">Download Registros em XML</button>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            $('#calendar').fullCalendar({
+                locale: 'pt-br',
+                selectable: true,
+                selectHelper: true,
+                dateClick: function(date, jsEvent, view) {
+                    console.log('Data selecionada: ' + date.format());
+                }
+            });
+        });
+
+        let irrigationRecords = [];
+
+        function openWeatherSite() {
+            window.open("https://tempo.cptec.inpe.br/");
+        }
+
+        function openSatelliteSite() {
+            window.open("https://sigma.cptec.inpe.br/prec_sat/");
+        }
+
+        function registerIrrigation() {
+            const selectedDate = $('#calendar').fullCalendar('getDate').format('YYYY-MM-DD');
+            const irrigationTime = $('#hour').val() + ':' + $('#minute').val();
+            const irrigationQuantity = $('#quantity').val();
+            const rainInfo = $('#rain').val();
+            const precipitation = $('#precipitation').val();
+
+            const record = {
+                Date: selectedDate,
+                "Irrigation Time": irrigationTime,
+                "Irrigation Quantity": irrigationQuantity,
+                Rain: rainInfo,
+                Precipitation: precipitation
+            };
+
+            irrigationRecords.push(record);
+            saveRecords();
+            alert("Irrigação Registrada com Sucesso.");
+
+            $('#hour').val('00');
+            $('#minute').val('00');
+            $('#quantity').val('');
+            $('#rain').val('Não');
+            $('#precipitation').val('');
+        }
+
+        function saveRecords() {
+            localStorage.setItem('irrigationRecords', JSON.stringify(irrigationRecords));
+        }
+
+        function loadRecords() {
+            const records = localStorage.getItem('irrigationRecords');
+            if (records) {
+                irrigationRecords = JSON.parse(records);
+            }
+        }
+
+        function deleteRecord(index) {
+            irrigationRecords.splice(index, 1);
+            saveRecords();
+            viewRecords();
+            alert("Registro apagado");
+        }
+
+        function viewRecords() {
+            if (irrigationRecords.length > 0) {
+                let recordsWindow = window.open("", "Registros de Irrigação", "width=350,height=400");
+                recordsWindow.document.write("<h1>Registros de Irrigação</h1>");
+                recordsWindow.document.write("<table border='1'><tr><th>Data</th><th>Horário de Irrigação</th><th>Quantidade de Irrigação (mm)</th><th>Choveu?</th><th>Precipitação prevista (mm)</th><th>Ação</th></tr>");
+                irrigationRecords.forEach((record, index) => {
+                    recordsWindow.document.write(`<tr><td>${record.Date}</td><td>${record["Irrigation Time"]}</td><td>${record["Irrigation Quantity"]}</td><td>${record.Rain}</td><td>${record.Precipitation}</td><td><button onclick="window.opener.deleteRecord(${index})">Apagar</button></td></tr>`);
+                });
+                recordsWindow.document.write("</table>");
+                recordsWindow.document.write("<button onclick='window.close()'>Fechar</button>");
+            } else {
+                alert("Não há registros de irrigação.");
+            }
+        }
+
+        function showGraph() {
+            if (irrigationRecords.length > 0) {
+                const dates = irrigationRecords.map(record => record.Date);
+                const quantities = irrigationRecords.map(record => parseFloat(record["Irrigation Quantity"]));
+
+                const ctx = document.createElement('canvas');
+                document.body.appendChild(ctx);
+
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: 'Quantidade de Irrigação (mm)',
+                            data: quantities,
+                            backgroundColor: 'skyblue'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            x: { beginAtZero: true },
+                            y: { beginAtZero: true }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Irrigação ao Longo dos Dias'
+                        }
+                    }
+                });
+            } else {
+                alert("Não há registros de irrigação para mostrar.");
+            }
+        }
+
+        function downloadRecordsAsXML() {
+            if (irrigationRecords.length > 0) {
+                let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<irrigationRecords>\n';
+                irrigationRecords.forEach(record => {
+                    xml += '  <record>\n';
+                    for (let key in record) {
+                        xml += `    <${key}>${record[key]}</${key}>\n`;
+                    }
+                    xml += '  </record>\n';
+                });
+                xml += '</irrigationRecords>';
+
+                const blob = new Blob([xml], { type: 'application/xml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'irrigationRecords.xml';
+                a.click();
+                URL.revokeObjectURL(url);
+            } else {
+                alert("Não há registros de irrigação para baixar.");
+            }
+        }
+
+        loadRecords();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>
